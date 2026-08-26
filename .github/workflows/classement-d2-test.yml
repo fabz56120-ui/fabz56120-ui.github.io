@@ -1,0 +1,89 @@
+name: Test capture classement D2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Installer Playwright
+        run: |
+          npm install playwright
+          npx playwright install --with-deps chromium
+
+      - name: Capturer le classement D2
+        run: |
+          node <<'EOF'
+          const { chromium } = require('playwright');
+
+          (async () => {
+            const browser = await chromium.launch({
+              headless: true
+            });
+
+            const page = await browser.newPage({
+              viewport: {
+                width: 1400,
+                height: 1200
+              },
+              deviceScaleFactor: 1
+            });
+
+            const url =
+              'https://footamateur.letelegramme.fr/clubs/les-glaneurs-de-notre-dame-lizio/#classements';
+
+            await page.goto(url, {
+              waitUntil: 'domcontentloaded',
+              timeout: 60000
+            });
+
+            await page.waitForTimeout(5000);
+
+            const tableau = page
+              .locator('table')
+              .filter({
+                hasText: 'Équipes'
+              })
+              .first();
+
+            if (await tableau.count() === 0) {
+              await page.screenshot({
+                path: 'debug-d2.png',
+                fullPage: true
+              });
+
+              throw new Error(
+                'Tableau D2 introuvable. Voir debug-d2.png'
+              );
+            }
+
+            await tableau.screenshot({
+              path: 'classement-d2.png',
+              animations: 'disabled'
+            });
+
+            await browser.close();
+          })();
+          EOF
+
+      - name: Conserver la capture
+        uses: actions/upload-artifact@v4
+        with:
+          name: classement-d2-test
+          path: |
+            classement-d2.png
+            debug-d2.png
+          if-no-files-found: ignore
