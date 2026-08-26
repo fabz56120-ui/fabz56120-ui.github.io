@@ -196,6 +196,7 @@ jobs:
           EOF
 
       - name: Conserver la capture
+         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: classement-d2-test
