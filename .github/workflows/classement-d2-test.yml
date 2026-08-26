@@ -30,6 +30,7 @@ jobs:
           const { chromium } = require('playwright');
 
           (async () => {
+
             const browser = await chromium.launch({
               headless: true
             });
@@ -45,37 +46,152 @@ jobs:
             const url =
               'https://footamateur.letelegramme.fr/clubs/les-glaneurs-de-notre-dame-lizio/#classements';
 
+            console.log('Ouverture de la page...');
+
             await page.goto(url, {
-              waitUntil: 'domcontentloaded',
-              timeout: 60000
+              waitUntil: 'networkidle',
+              timeout: 90000
             });
 
             await page.waitForTimeout(5000);
 
-            const tableau = page
-              .locator('table')
-              .filter({
-                hasText: 'Équipes'
-              })
-              .first();
+            console.log('Page chargee.');
 
-            if (await tableau.count() === 0) {
+            /*
+             * On cherche le texte "Équipes".
+             * Le site n'utilise pas une balise <table> classique.
+             */
+
+            const titre =
+              page.getByText('Équipes', {
+                exact: true
+              }).first();
+
+            if (await titre.count() === 0) {
+
+              console.log(
+                'Texte Équipes introuvable.'
+              );
+
               await page.screenshot({
                 path: 'debug-d2.png',
                 fullPage: true
               });
 
               throw new Error(
-                'Tableau D2 introuvable. Voir debug-d2.png'
+                'Classement D2 introuvable. Voir debug-d2.png'
               );
             }
 
-            await tableau.screenshot({
+            console.log(
+              'En-tete du classement trouve.'
+            );
+
+            /*
+             * On remonte dans les conteneurs jusqu'a trouver
+             * celui qui contient les equipes du classement.
+             */
+
+            let bloc = titre;
+
+            for (let i = 0; i < 8; i++) {
+
+              const parent =
+                bloc.locator('xpath=..');
+
+              if (await parent.count() === 0)
+                break;
+
+              const texte =
+                await parent.innerText();
+
+              if (
+                texte.includes('Carentoir') &&
+                texte.includes('Caro Missiriac') &&
+                texte.includes('Guillac') &&
+                texte.includes('Lizio')
+              ) {
+
+                bloc = parent;
+
+                console.log(
+                  'Bloc du classement trouve au niveau ' +
+                  (i + 1)
+                );
+
+                break;
+              }
+
+              bloc = parent;
+            }
+
+            const texteBloc =
+              await bloc.innerText();
+
+            /*
+             * Verification supplementaire :
+             * on doit retrouver plusieurs equipes D2.
+             */
+
+            const equipes = [
+              'Carentoir',
+              'Caro Missiriac',
+              'Foug.-St-Martin',
+              'Guillac',
+              'La Gacilly',
+              'Le Roc',
+              'Lizio',
+              'Ruffiac-Malestroit',
+              'St-Guyomard',
+              'St-Servant',
+              'Sérent',
+              'USSAC'
+            ];
+
+            let nombreTrouvees = 0;
+
+            for (const equipe of equipes) {
+
+              if (texteBloc.includes(equipe)) {
+                nombreTrouvees++;
+              }
+
+            }
+
+            console.log(
+              'Equipes trouvees : ' +
+              nombreTrouvees +
+              '/12'
+            );
+
+            if (nombreTrouvees < 8) {
+
+              await page.screenshot({
+                path: 'debug-d2.png',
+                fullPage: true
+              });
+
+              throw new Error(
+                'Le bloc trouve ne contient pas suffisamment ' +
+                'd equipes D2. Voir debug-d2.png'
+              );
+            }
+
+            /*
+             * Capture du classement.
+             */
+
+            await bloc.screenshot({
               path: 'classement-d2.png',
               animations: 'disabled'
             });
 
+            console.log(
+              'Capture classement-d2.png creee.'
+            );
+
             await browser.close();
+
           })();
           EOF
 
@@ -86,4 +202,4 @@ jobs:
           path: |
             classement-d2.png
             debug-d2.png
-          if-no-files-found: ignore
+          if-no-files-found: warn
